@@ -28,6 +28,7 @@
     let panelCollapsed = false;
     let panelIconMode = false;
     let currentSettings = {};
+    let shadowRoot = null;
 
     const SNAP_THRESHOLD = 30;
     const ICON_SIZE = 44;
@@ -36,11 +37,57 @@
     function init() {
         loadTasks();
         loadSettings();
+        createShadowDOM();
         createHighlightBox();
         createFloatingIcon();
         createControlPanel();
         applySettings();
         startSavedTasks();
+    }
+
+    function createShadowDOM() {
+        const host = document.createElement('div');
+        host.id = 'auto-click-host';
+        host.style.cssText = 'position: fixed; top: 0; left: 0; width: 0; height: 0; z-index: 2147483647; pointer-events: none;';
+        document.documentElement.appendChild(host);
+        shadowRoot = host.attachShadow({ mode: 'open' });
+
+        const style = document.createElement('style');
+        style.textContent = `
+            * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+            input, button {
+                font-family: Arial, sans-serif;
+                font-size: 14px;
+            }
+            input[type="number"], input[type="text"] {
+                padding: 4px 8px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                outline: none;
+            }
+            input[type="number"]:focus, input[type="text"]:focus {
+                border-color: #007bff;
+            }
+            button {
+                cursor: pointer;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 16px;
+                transition: opacity 0.2s;
+            }
+            button:hover {
+                opacity: 0.9;
+            }
+        `;
+        shadowRoot.appendChild(style);
+    }
+
+    function queryShadow(selector) {
+        return shadowRoot.querySelector(selector);
     }
 
     function loadTasks() {
@@ -98,8 +145,8 @@
         }
 
         if (currentSettings.collapsed && controlPanel) {
-            const content = document.getElementById('panel-content');
-            const toggle = document.getElementById('toggle-panel');
+            const content = queryShadow('#panel-content');
+            const toggle = queryShadow('#toggle-panel');
             if (content && toggle) {
                 content.style.display = 'none';
                 toggle.textContent = '+';
@@ -124,7 +171,7 @@
             border-radius: 2px;
             transition: all 0.05s ease;
         `;
-        document.documentElement.appendChild(highlightBox);
+        shadowRoot.appendChild(highlightBox);
     }
 
     function createFloatingIcon() {
@@ -147,6 +194,7 @@
             font-size: 20px;
             user-select: none;
             transition: transform 0.2s ease, box-shadow 0.2s ease;
+            pointer-events: auto;
         `;
         floatingIcon.innerHTML = '🖱️';
         floatingIcon.title = '自动点击助手 - 点击展开';
@@ -165,7 +213,7 @@
             saveSettings();
         });
 
-        document.documentElement.appendChild(floatingIcon);
+        shadowRoot.appendChild(floatingIcon);
         makeDraggableIcon(floatingIcon);
     }
 
@@ -323,6 +371,7 @@
             z-index: 2147483646;
             font-family: Arial, sans-serif;
             font-size: 14px;
+            pointer-events: auto;
         `;
         controlPanel.innerHTML = `
                 <div style="
@@ -399,17 +448,17 @@
                 </div>
         `;
 
-        document.body.appendChild(controlPanel);
+        shadowRoot.appendChild(controlPanel);
         bindPanelEvents();
         makeDraggablePanel();
         updateTaskList();
     }
 
     function bindPanelEvents() {
-        document.getElementById('select-element').addEventListener('click', startElementSelection);
-        document.getElementById('add-task').addEventListener('click', addTask);
-        document.getElementById('toggle-panel').addEventListener('click', togglePanel);
-        document.getElementById('minimize-to-icon').addEventListener('click', () => {
+        queryShadow('#select-element').addEventListener('click', startElementSelection);
+        queryShadow('#add-task').addEventListener('click', addTask);
+        queryShadow('#toggle-panel').addEventListener('click', togglePanel);
+        queryShadow('#minimize-to-icon').addEventListener('click', () => {
             currentSettings.iconMode = true;
             currentSettings.panelLeft = controlPanel.getBoundingClientRect().left;
             currentSettings.panelTop = controlPanel.getBoundingClientRect().top;
@@ -419,7 +468,7 @@
     }
 
     function makeDraggablePanel() {
-        const header = document.getElementById('panel-header');
+        const header = queryShadow('#panel-header');
         let isDragging = false;
         let startX, startY, startLeft, startTop;
 
@@ -459,11 +508,9 @@
             controlPanel.style.bottom = 'auto';
         }
 
-        function dragEnd(e) {
+        function dragEnd() {
             if (!isDragging) return;
             isDragging = false;
-            e.preventDefault();
-            e.stopPropagation();
 
             document.removeEventListener('mousemove', drag);
             document.removeEventListener('mouseup', dragEnd);
@@ -475,8 +522,8 @@
     }
 
     function togglePanel() {
-        const content = document.getElementById('panel-content');
-        const toggle = document.getElementById('toggle-panel');
+        const content = queryShadow('#panel-content');
+        const toggle = queryShadow('#toggle-panel');
 
         if (content.style.display === 'none') {
             content.style.display = 'block';
@@ -499,8 +546,9 @@
         }
 
         isSelecting = true;
-        document.getElementById('select-element').textContent = '取消选择';
-        document.getElementById('select-element').style.background = '#dc3545';
+        const btn = queryShadow('#select-element');
+        btn.textContent = '取消选择';
+        btn.style.background = '#dc3545';
 
         createOverlay();
         document.addEventListener('mousemove', onMouseMoveForSelection, true);
@@ -511,8 +559,9 @@
 
     function stopElementSelection() {
         isSelecting = false;
-        document.getElementById('select-element').textContent = '选择元素';
-        document.getElementById('select-element').style.background = '#28a745';
+        const btn = queryShadow('#select-element');
+        btn.textContent = '选择元素';
+        btn.style.background = '#28a745';
 
         if (overlay) {
             overlay.remove();
@@ -545,10 +594,7 @@
     function getRealElementAtPoint(x, y) {
         const elements = document.elementsFromPoint(x, y);
         for (const el of elements) {
-            if (el.id === 'auto-click-panel' || el.closest('#auto-click-panel')) continue;
-            if (el.id === 'auto-click-icon') continue;
-            if (el === highlightBox) continue;
-            if (el === overlay) continue;
+            if (el.id === 'auto-click-host') continue;
             if (el === document.documentElement || el === document.body) continue;
             return el;
         }
@@ -590,7 +636,7 @@
         const elementInfo = getElementInfo(selectedElement);
         showToast(`已选择: ${elementInfo}`);
 
-        const taskNameInput = document.getElementById('task-name');
+        const taskNameInput = queryShadow('#task-name');
         if (!taskNameInput.value) {
             taskNameInput.value = elementInfo;
         }
@@ -670,8 +716,8 @@
             return;
         }
 
-        const interval = parseInt(document.getElementById('interval-input').value);
-        const taskName = document.getElementById('task-name').value.trim();
+        const interval = parseInt(queryShadow('#interval-input').value);
+        const taskName = queryShadow('#task-name').value.trim();
 
         if (!taskName) {
             showToast('请输入任务名称', 'error');
@@ -706,14 +752,14 @@
         saveTasks();
         updateTaskList();
 
-        document.getElementById('task-name').value = '';
+        queryShadow('#task-name').value = '';
         selectedElement = null;
 
         showToast(`任务 "${taskName}" 已添加`);
     }
 
     function updateTaskList() {
-        const taskList = document.getElementById('task-list');
+        const taskList = queryShadow('#task-list');
         if (!taskList) return;
 
         if (tasks.length === 0) {
@@ -746,9 +792,9 @@
                     选择器: ${task.selector}
                 </div>
                 <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
-                    间隔: ${task.interval}秒 | 创建: ${task.created}
+                    间隔: <span class="interval-display">${task.interval}</span>秒 | 创建: ${task.created}
                 </div>
-                <div style="display: flex; gap: 5px;">
+                <div style="display: flex; gap: 5px; flex-wrap: wrap;">
                     <button class="toggle-btn" style="
                         background: ${task.active ? '#dc3545' : '#28a745'};
                         color: white;
@@ -759,6 +805,17 @@
                         font-size: 12px;
                     ">
                         ${task.active ? '停止' : '启动'}
+                    </button>
+                    <button class="edit-btn" style="
+                        background: #17a2b8;
+                        color: white;
+                        border: none;
+                        padding: 4px 8px;
+                        border-radius: 3px;
+                        cursor: pointer;
+                        font-size: 12px;
+                    ">
+                        编辑
                     </button>
                     <button class="delete-btn" style="
                         background: #6c757d;
@@ -775,13 +832,41 @@
             `;
 
             const toggleBtn = taskDiv.querySelector('.toggle-btn');
+            const editBtn = taskDiv.querySelector('.edit-btn');
             const deleteBtn = taskDiv.querySelector('.delete-btn');
 
             toggleBtn.addEventListener('click', () => toggleTask(task.id));
+            editBtn.addEventListener('click', () => editTask(task.id));
             deleteBtn.addEventListener('click', () => deleteTask(task.id));
 
             taskList.appendChild(taskDiv);
         });
+    }
+
+    function editTask(taskId) {
+        const task = tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        const newInterval = prompt('请输入新的点击间隔(秒):', task.interval);
+        if (newInterval === null) return;
+
+        const interval = parseInt(newInterval);
+        if (isNaN(interval) || interval < 1) {
+            showToast('间隔必须是大于0的数字', 'error');
+            return;
+        }
+
+        task.interval = interval;
+        saveTasks();
+
+        if (task.active) {
+            stopTask(taskId);
+            startTask(taskId);
+        } else {
+            updateTaskList();
+        }
+
+        showToast(`任务 "${task.name}" 间隔已更新为 ${interval}秒`);
     }
 
     function toggleTask(taskId) {
